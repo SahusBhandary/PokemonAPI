@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pokemon Stats Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .pokemon-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 10px;
+            text-align: center;
+        }
+
+        .pokemon-image {
+            margin-bottom: 20px;
+        }
+
+        #pokemonStatsChart {
+            margin-top: 20px;
+        }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 20px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="pokemonContainer">
+        <label for="generationSelector">Select a Generation:</label>
+        <select id="generationSelector" onchange="updatePokemonList()">
+        </select>
+
+        <label for="pokemonSelector">Select a Pokemon:</label>
+        <select id="pokemonSelector">
+        </select>
+
+        <button onclick="addPokemon()">Add Pokemon</button>
+
+        <div class="pokemon-container" id="selectedPokemonContainer"></div>
+
+        <canvas id="pokemonStatsChart" width="400" height="400"></canvas>
+
+        <div class="legend" id="legendContainer"></div>
+    </div>
+    <script>
+        const pokemonData = [];
+        let chart;
+
+        async function fetchGenerations() {
+            const response = await fetch("https://pokeapi.co/api/v2/generation");
+            const data = await response.json();
+            return data.results;
+        }
+
+        async function fetchPokemonByGeneration(generationId) {
+            const response = await fetch(`https://pokeapi.co/api/v2/generation/${generationId}`);
+            const data = await response.json();
+            return data.pokemon_species;
+        }
+
+        async function fetchPokemonData(pokemonName) {
+            const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonName}`);
+            const data = await response.json();
+
+            // Fetch the Pokémon image
+            const imageResponse = await fetch(`https://pokeapi.co/api/v2/pokemon-form/${data.id}`);
+            const imageData = await imageResponse.json();
+            const imageUrl = imageData.sprites.front_default;
+
+            return {
+                name: data.name,
+                attack: data.stats[1].base_stat,
+                defense: data.stats[2].base_stat,
+                image: imageUrl,
+            };
+        }
+
+        async function updatePokemonList() {
+            const generationSelector = document.getElementById("generationSelector");
+            const selectedGenerationId = generationSelector.value;
+
+            const pokemonSelector = document.getElementById("pokemonSelector");
+            pokemonSelector.innerHTML = '<option value="">Select a Pokemon</option>'; // Reset the Pokemon selector
+
+            if (selectedGenerationId) {
+                const pokemonList = await fetchPokemonByGeneration(selectedGenerationId);
+
+                for (const pokemon of pokemonList) {
+                    const option = document.createElement("option");
+                    option.value = pokemon.name;
+                    option.text = pokemon.name;
+                    pokemonSelector.add(option);
+                }
+            }
+        }
+
+        async function addPokemon() {
+            const selectedPokemonName = document.getElementById("pokemonSelector").value;
+
+            if (selectedPokemonName) {
+                const selectedPokemon = await fetchPokemonData(selectedPokemonName);
+                pokemonData.push(selectedPokemon);
+
+                updateChart();
+                updateSelectedPokemonContainer();
+                updateLegend();
+            }
+        }
+
+        function updateSelectedPokemonContainer() {
+            const selectedPokemonContainer = document.getElementById('selectedPokemonContainer');
+            selectedPokemonContainer.innerHTML = ''; // Clear existing content
+
+            for (const pokemon of pokemonData) {
+                const pokemonContainer = document.createElement('div');
+                pokemonContainer.classList.add('pokemon-container');
+
+                const image = document.createElement('img');
+                image.src = pokemon.image;
+                image.alt = pokemon.name;
+                image.classList.add('pokemon-image');
+                //pokemonContainer.appendChild(image);
+
+                // const nameStat = document.createElement('p');
+                // nameStat.textContent = `${pokemon.name} - Attack: ${pokemon.attack}, Defense: ${pokemon.defense}`;
+                // pokemonContainer.appendChild(nameStat);
+
+                selectedPokemonContainer.appendChild(pokemonContainer);
+            }
+        }
+
+        function updateChart() {
+            if (!chart) {
+                const ctx = document.getElementById('pokemonStatsChart').getContext('2d');
+                chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'Attack',
+                                data: [],
+                                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                            },
+                            {
+                                label: 'Defense',
+                                data: [],
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            },
+                        ],
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                            },
+                        },
+                    },
+                });
+            }
+
+            const labels = pokemonData.map(pokemon => pokemon.name);
+            const attackStats = pokemonData.map(pokemon => pokemon.attack);
+            const defenseStats = pokemonData.map(pokemon => pokemon.defense);
+
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = attackStats;
+            chart.data.datasets[1].data = defenseStats;
+
+            chart.update();
+        }
+
+        function updateLegend() {
+            const legendContainer = document.getElementById('legendContainer');
+            legendContainer.innerHTML = ''; // Clear existing content
+
+            for (let i = 0; i < pokemonData.length; i++) {
+                const legendItem = document.createElement('div');
+                legendItem.classList.add('legend-item');
+
+                // Create an img element for the Pokemon image in the legend
+                const legendImage = document.createElement('img');
+                legendImage.src = pokemonData[i].image;
+                legendImage.alt = pokemonData[i].name;
+                legendImage.classList.add('legend-color');
+                legendItem.appendChild(legendImage);
+
+                const legendText = document.createElement('p');
+                legendText.textContent = pokemonData[i].name;
+                legendItem.appendChild(legendText);
+
+                legendContainer.appendChild(legendItem);
+            }
+        }
+
+
+        async function plotPokemonStats() {
+            const generations = await fetchGenerations();
+
+            const generationSelector = document.getElementById("generationSelector");
+            for (const generation of generations) {
+                const option = document.createElement("option");
+                option.value = generation.url.split("/")[6]; // Extract generation ID from URL
+                option.text = generation.name;
+                generationSelector.add(option);
+            }
+        }
+
+        plotPokemonStats();
+    </script>
+</body>
+</html>
